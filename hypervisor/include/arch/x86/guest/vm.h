@@ -187,6 +187,8 @@ struct vm {
 	unsigned char rpmb_key[RPMB_KEY_LEN];
 	struct secure_world_control sworld_control;
 
+	bool rpmb_key_retrieved;
+
 	uint32_t vcpuid_entry_nr, vcpuid_level, vcpuid_xlevel;
 	struct vcpuid_entry vcpuid_entries[MAX_VM_VCPUID_ENTRIES];
 };

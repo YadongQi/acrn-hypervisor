@@ -360,6 +360,13 @@ static bool setup_trusty_info(struct vcpu *vcpu,
 		}
 	}
 
+	/* Copy virtual RPMB Key to trusty's memory */
+	memcpy_s(&mem->first_page.key_info.rpmb_key[0][0], RPMB_KEY_LEN,
+			&vcpu->vm->rpmb_key[0], RPMB_KEY_LEN);
+	/* Clear unused rpmb key area */
+	memset(&mem->first_page.key_info.rpmb_key[1][0], 0,
+			RPMB_KEY_LEN * (RPMB_MAX_PARTITION_NUMBER - 1));
+
 	/* Prepare trusty startup param */
 	mem->first_page.startup_param.size_of_this_struct =
 			sizeof(struct trusty_startup_param);

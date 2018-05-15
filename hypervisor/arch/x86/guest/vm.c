@@ -150,6 +150,8 @@ int create_vm(struct vm_description *vm_desc, struct vm **rtn_vm)
 						sizeof(vm_desc->rpmb_key));
 		}
 
+		vm->rpmb_key_retrieved = 0;
+
 		INIT_LIST_HEAD(&vm->list);
 		spinlock_obtain(&vm_list_lock);
 		list_add(&vm->list, &vm_list);
