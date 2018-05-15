@@ -31,8 +31,9 @@
 #ifndef TRUSTY_H_
 #define TRUSTY_H_
 
-#define BOOTLOADER_SEED_MAX_ENTRIES    10
+#define BOOTLOADER_SEED_MAX_ENTRIES     10
 #define RPMB_MAX_PARTITION_NUMBER       6
+#define RPMB_KEY_LEN                    64
 #define MMC_PROD_NAME_WITH_PSN_LEN      15
 #define BUP_MKHI_BOOTLOADER_SEED_LEN    64
 
@@ -95,7 +96,7 @@ struct key_info {
 	 *  RPMB partition, or because OSloader doesn't want to share
 	 *  the n-th RPMB key with Trusty)
 	 */
-	uint8_t rpmb_key[RPMB_MAX_PARTITION_NUMBER][64];
+	uint8_t rpmb_key[RPMB_MAX_PARTITION_NUMBER][RPMB_KEY_LEN];
 
 	/* 256-bit AES encryption key to encrypt/decrypt attestation keybox,
 	   this key should be derived from a fixed key which is RPMB seed.

@@ -145,6 +145,9 @@ int create_vm(struct vm_description *vm_desc, struct vm **rtn_vm)
 			memcpy_s(&vm->GUID[0], sizeof(vm->GUID),
 						&vm_desc->GUID[0],
 						sizeof(vm_desc->GUID));
+			memcpy_s(&vm->rpmb_key[0], sizeof(vm->rpmb_key),
+						&vm_desc->rpmb_key[0],
+						sizeof(vm_desc->rpmb_key));
 		}
 
 		INIT_LIST_HEAD(&vm->list);

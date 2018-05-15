@@ -184,6 +184,7 @@ struct vm {
 	} virtual_device_list;
 
 	unsigned char GUID[16];
+	unsigned char rpmb_key[RPMB_KEY_LEN];
 	struct secure_world_control sworld_control;
 
 	uint32_t vcpuid_entry_nr, vcpuid_level, vcpuid_xlevel;
@@ -198,6 +199,7 @@ struct vm_description {
 	 */
 	int                    *vm_hw_logical_core_ids;
 	unsigned char          GUID[16]; /* GUID of the vm will be created */
+	unsigned char          rpmb_key[RPMB_KEY_LEN]; /* RPMB_KEY of the vm */
 	int                    vm_hw_num_cores;   /* Number of virtual cores */
 	/* Indicates to APs that the BSP has created a VM for this
 	 * description
