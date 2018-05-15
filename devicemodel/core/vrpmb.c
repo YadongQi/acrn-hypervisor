@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2018 Intel Corporation
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY NETAPP, INC ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL NETAPP, INC OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ */
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+
+#include "types.h"
+#include "vrpmb.h"
+#include "acrn_common.h"
+
+#define DRNG_MAX_RETRIES 5
+
+static uint8_t *vrpmb_key = NULL;
+
+static int rdrand64(uint64_t *rand_val)
+{
+	uint8_t cf;
+	int i;
+
+	for (i = 0; i < DRNG_MAX_RETRIES; i++) {
+		asm volatile (
+			"RDRAND %0;"
+			"setc %1;"
+			: "=r"(*rand_val), "=qm"(cf)
+		);
+
+		if (cf)
+			return 1;
+	}
+
+	return 0;
+}
+
+int get_vrpmb_key(uint8_t *out)
+{
+	int i;
+	int ret;
+
+	if (!out) {
+		fprintf(stderr, "%s: Invalid output pointer\n", __func__);
+		return 0;
+	}
+
+	if (!vrpmb_key) {
+		vrpmb_key = (uint8_t *)calloc(1, RPMB_KEY_LEN);
+		assert(vrpmb_key != NULL);
+
+		for (i = 0; i < RPMB_KEY_LEN; i+=8) {
+			ret = rdrand64((uint64_t *)&vrpmb_key[i]);
+			if (ret == 0) {
+				fprintf(stderr,
+					"%s: failed to generate vKEY[%d]\n"
+					"will retry until succeed\n",
+					__func__, i);
+			}
+
+			/* Request random number until succeed */
+			while (ret == 0) {
+				ret = rdrand64((uint64_t *)&vrpmb_key[i]);
+			}
+		}
+	}
+
+	memcpy(out, vrpmb_key, RPMB_KEY_LEN);
+	return 1;
+}

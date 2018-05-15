@@ -58,6 +58,8 @@
 
 #include "dm.h"
 
+#include "vrpmb.h"
+
 #define MAP_NOCORE 0
 #define MAP_ALIGNED_SUPER 0
 
@@ -111,6 +113,7 @@ vm_open(const char *name)
 	struct acrn_create_vm create_vm;
 	int error, retry = 10;
 	uuid_t vm_uuid;
+	uint8_t vrpmb_key[RPMB_KEY_LEN] = {0};
 
 	ctx = calloc(1, sizeof(struct vmctx) + strlen(name) + 1);
 	assert(ctx != NULL);
@@ -138,6 +141,10 @@ vm_open(const char *name)
 	/* Pass uuid as parameter of create vm*/
 	uuid_copy(create_vm.GUID, vm_uuid);
 
+	/* Get vRPMB_KEY and Pass gva as parameter of create vm */
+	get_vrpmb_key(&vrpmb_key[0]);
+	create_vm.vrpmb_key_gva = (uint64_t)(&vrpmb_key[0]);
+
 	ctx->fd = devfd;
 	ctx->memflags = 0;
 	ctx->lowmem_limit = 2 * GB;
@@ -164,10 +171,12 @@ vm_open(const char *name)
 	}
 
 	ctx->vmid = create_vm.vmid;
+	memset(vrpmb_key, 0, sizeof(vrpmb_key));
 
 	return ctx;
 
 err:
+	memset(vrpmb_key, 0, sizeof(vrpmb_key));
 	free(ctx);
 	return NULL;
 }
