@@ -163,8 +163,11 @@ struct acrn_create_vm {
 	 */
 	uint64_t vm_flag;
 
+	/** virtual RPMB key for this VM */
+	uint64_t vrpmb_key_gva;
+
 	/** Reserved for future use*/
-	uint8_t  reserved[24];
+	uint8_t  reserved[16];
 } __aligned(8);
 
 /**

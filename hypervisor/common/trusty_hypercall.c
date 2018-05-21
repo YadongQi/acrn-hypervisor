@@ -89,3 +89,27 @@ int64_t hcall_initialize_trusty(struct vcpu *vcpu, uint64_t param)
 
 	return 0;
 }
+
+int64_t hcall_get_rpmb_key(struct vm *vm, uint64_t param)
+{
+	if (vm->rpmb_key_retrieved) {
+		pr_err("The RPMB key is already retrieved by Guest!\n");
+		return -1;
+	}
+
+	/* HC from VM0(SOS): Pass real RPMB key
+	 * HC from VMx(UOS): Pass virtual RPMB key
+	 *
+	 * It is expected that Guest can only call this once, then
+	 * it cannot get its RPMB key any more.
+	 *
+	 * The virtual RPMB key must be wiped out from UOS's
+	 * memory after using in UOS(vSBL and/or OSloader).
+	 */
+	copy_to_vm(vm, &vm->rpmb_key[0], param, RPMB_KEY_LEN);
+
+	vm->rpmb_key_retrieved = 1;
+	/* TODO: Set rpmb_key_retrieved to 0 when VM do warm restart */
+
+	return 0;
+}

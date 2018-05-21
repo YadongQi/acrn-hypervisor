@@ -150,6 +150,10 @@ int vmcall_vmexit_handler(struct vcpu *vcpu)
 		ret = hcall_get_cpu_pm_state(vm, param1, param2);
 		break;
 
+	case HC_GET_RPMB_KEY:
+		ret = hcall_get_rpmb_key(vm, param1);
+		break;
+
 	default:
 		pr_err("op %d: Invalid hypercall\n", hypcall_id);
 		ret = -1;

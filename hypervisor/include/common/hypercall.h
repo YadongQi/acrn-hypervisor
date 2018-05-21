@@ -358,6 +358,16 @@ int64_t hcall_world_switch(struct vcpu *vcpu);
 int64_t hcall_initialize_trusty(struct vcpu *vcpu, uint64_t param);
 
 /**
+ * @brief Get RPMB key for a VM.
+ *
+ * @param vm Pointer to VM data structure
+ * @param guest physical address. This gpa points to
+ *              Guest RPMB key area
+ * @return 0 on success, non-zero on error.
+ */
+int64_t hcall_get_rpmb_key(struct vm *vm, uint64_t param);
+
+/**
  * @}
  */
 

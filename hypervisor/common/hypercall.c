@@ -163,6 +163,7 @@ int64_t hcall_create_vm(struct vm *vm, uint64_t param)
 	 */
 	struct acrn_create_vm cv;
 	struct vm_description vm_desc;
+	uint64_t vrkey_gpa;
 
 	memset((void *)&cv, 0, sizeof(cv));
 	if (copy_from_vm(vm, &cv, param, sizeof(cv))) {
@@ -174,6 +175,11 @@ int64_t hcall_create_vm(struct vm *vm, uint64_t param)
 	vm_desc.sworld_enabled =
 		(!!(cv.vm_flag & (SECURE_WORLD_ENABLED)));
 	memcpy_s(&vm_desc.GUID[0], 16, &cv.GUID[0], 16);
+
+	vrkey_gpa = gva2gpa(vm, exec_vmread(VMX_GUEST_CR3), cv.vrpmb_key_gva);
+	copy_from_vm(vm, &vm_desc.rpmb_key[0], vrkey_gpa,
+					sizeof(vm_desc.rpmb_key));
+
 	ret = create_vm(&vm_desc, &target_vm);
 
 	if (ret != 0) {
