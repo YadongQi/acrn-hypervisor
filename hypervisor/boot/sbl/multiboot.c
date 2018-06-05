@@ -19,7 +19,7 @@
  */
 static char kernel_cmdline[MEM_2K];
 
-/*now modules support: FIRMWARE & RAMDISK */
+/* now modules support: FIRMWARE & RAMDISK & SeedList */
 static void parse_other_modules(struct vm *vm,
 	struct multiboot_module *mods, int mods_count)
 {
@@ -73,6 +73,8 @@ static void parse_other_modules(struct vm *vm,
 			vm->sw.linux_info.ramdisk_src_addr = mod_addr;
 			vm->sw.linux_info.ramdisk_load_addr = mod_addr;
 			vm->sw.linux_info.ramdisk_size = mod_size;
+		} else if (strncmp("SeedList", start, type_len) == 0) {
+			init_seed_list(mod_addr);
 		} else {
 			pr_warn("not support mod, cmd: %s", start);
 		}
