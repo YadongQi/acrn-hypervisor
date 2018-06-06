@@ -419,3 +419,63 @@ bool initialize_trusty(struct vcpu *vcpu, uint64_t param)
 
 	return false;
 }
+
+void init_seed_list(struct seed_list_hob *seed_hob)
+{
+	uint8_t i;
+	uint8_t dseed_index = 0;
+	struct seed_entry *entry;
+
+	if (!seed_hob) {
+		pr_warn("Invalid seed_list hob pointer. Use fake seed!");
+		goto fake_seed;
+	}
+
+	if (seed_hob->total_seed_count == 0) {
+		pr_warn("Total seed count is 0. Use fake seed!");
+		goto fake_seed;
+	}
+
+	entry = (struct seed_entry *)((uint8_t *)seed_hob +
+					sizeof(struct seed_list_hob));
+
+	for (i = 0; i < seed_hob->total_seed_count; i++) {
+		/* Only dseed is required for trusty */
+		if ((SEED_ENTRY_TYPE_SVNSEED == entry->type) &&
+			(SEED_ENTRY_USAGE_DSEED == entry->usage)) {
+
+			/* The seed_entry with same type/usage are always
+			 * arranged by index in order of 0~3. So goto fake
+			 * if index mismatch.
+			 */
+			if (entry->index != dseed_index) {
+				pr_warn("Index mismatch. Use fake seed!");
+				goto fake_seed;
+			}
+
+			memcpy_s(&g_key_info.dseed_list[dseed_index],
+					sizeof(struct seed_info),
+					entry->seed,
+					sizeof(struct seed_info));
+			dseed_index++;
+
+			/* erase original seed */
+			memset(entry->seed, 0, sizeof(struct seed_info));
+		}
+		entry = (struct seed_entry *)((uint8_t *)entry +
+						entry->seed_entry_size);
+	}
+
+	if (dseed_index == 0) {
+		pr_warn("No dseed found in HOB. Use fake seed!");
+		goto fake_seed;
+	}
+
+	g_key_info.num_seeds = dseed_index;
+	return;
+
+fake_seed:
+	g_key_info.num_seeds = 1;
+	memset(g_key_info.dseed_list[0].seed, 0xA5,
+			sizeof(g_key_info.dseed_list[0].seed));
+}

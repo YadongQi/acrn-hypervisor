@@ -12,6 +12,12 @@
 #define MMC_PROD_NAME_WITH_PSN_LEN      15
 #define BUP_MKHI_BOOTLOADER_SEED_LEN    64
 
+#define SEED_ENTRY_TYPE_SVNSEED         0x1
+#define SEED_ENTRY_TYPE_RPMBSEED        0x2
+
+#define SEED_ENTRY_USAGE_USEED          0x1
+#define SEED_ENTRY_USAGE_DSEED          0x2
+
 /* Trusty EPT rebase gpa: 511G */
 #define TRUSTY_EPT_REBASE_GPA (511ULL*1024ULL*1024ULL*1024ULL)
 #define TRUSTY_MEMORY_SIZE        0x01000000
@@ -115,9 +121,38 @@ struct trusty_startup_param {
 	uint8_t padding[4];
 };
 
+struct seed_list_hob {
+	uint8_t revision;
+	uint8_t reserved0[3];
+	uint32_t buffer_size;
+	uint8_t total_seed_count;
+	uint8_t reserved1[3];
+};
+
+struct seed_entry {
+	/* SVN based seed or RPMB seed or attestation key_box */
+	uint8_t type;
+	/* For SVN seed: useed or dseed
+	 * For RPMB seed: serial number based or not
+	 */
+	uint8_t usage;
+	/* index for the same type and usage seed */
+	uint8_t index;
+	uint8_t reserved;
+	/* reserved for future use */
+	uint16_t flags;
+	/* Total size of this seed entry */
+	uint16_t seed_entry_size;
+	/* SVN seed: struct seed_info
+	 * RPMB seed: uint8_t rpmb_key[key_len]
+	 */
+	uint8_t seed[0];
+};
+
 void switch_world(struct vcpu *vcpu, int next_world);
 bool initialize_trusty(struct vcpu *vcpu, uint64_t param);
 void destroy_secure_world(struct vm *vm);
+void init_seed_list(struct seed_list_hob *seed_hob);
 
 #endif /* TRUSTY_H_ */
 
