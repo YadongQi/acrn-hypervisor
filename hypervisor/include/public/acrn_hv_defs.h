@@ -248,20 +248,38 @@ struct trusty_boot_param {
 	/** version of this structure */
 	uint32_t version;
 
-	/** trusty runtime memory base address */
-	uint32_t base_addr;
+	/** Payload of boot param */
+	union {
+		/** structure support Version 1 */
+		struct {
+			/** trusty runtime memory base address */
+			uint32_t base_addr;
 
-	/** trusty entry point */
-	uint32_t entry_point;
+			/** trusty entry point */
+			uint32_t entry_point;
 
-	/** trusty runtime memory size */
-	uint32_t mem_size;
+			/** trusty runtime memory size */
+			uint32_t mem_size;
 
-	/** padding */
-	uint32_t padding;
+			/** padding */
+			uint32_t padding;
+		} v1;
 
-	/** rpmb key */
-	uint8_t rpmb_key[64];
+		/** structure support Version 2 */
+		struct {
+			/** trusty runtime memory base address */
+			uint64_t base_addr;
+
+			/** trusty entry point */
+			uint64_t entry_point;
+
+			/** trusty runtime memory size */
+			uint64_t mem_size;
+
+			/** rpmb key */
+			uint8_t rpmb_key[64];
+		} v2;
+	} payload;
 } __aligned(8);
 
 /**
