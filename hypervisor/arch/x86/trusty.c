@@ -53,15 +53,6 @@ static struct key_info g_key_info = {
 #ifndef WORKAROUND_FOR_TRUSTY_4G_MEM
 
 /**
- * @defgroup trusty_apis Trusty APIs
- *
- * This is a special group that includes all APIs
- * related to Trusty
- *
- * @{
- */
-
-/**
  * @brief Create Secure World EPT hierarchy
  *
  * Create Secure World EPT hierarchy, construct new PML4/PDPT, reuse PD/PT parse from
@@ -182,35 +173,6 @@ static void create_secure_world_ept(struct vm *vm, uint64_t gpa_orig,
 		vcpu_make_request(vcpu, ACRN_REQUEST_EPT_FLUSH);
 	}
 }
-
-void  destroy_secure_world(struct vm *vm)
-{
-	struct map_params  map_params;
-	struct vm *vm0 = get_vm_from_vmid(0);
-
-	if (vm0 == NULL) {
-		pr_err("Parse vm0 context failed.");
-		return;
-	}
-
-	/* clear trusty memory space */
-	(void)memset(HPA2HVA(vm->sworld_control.sworld_memory.base_hpa),
-			0, vm->sworld_control.sworld_memory.length);
-
-	/* restore memory to SOS ept mapping */
-	map_params.page_table_type = PTT_EPT;
-	map_params.pml4_base = HPA2HVA(vm0->arch_vm.nworld_eptp);
-	map_params.pml4_inverted = HPA2HVA(vm0->arch_vm.m2p);
-
-	map_mem(&map_params, (void *)vm->sworld_control.sworld_memory.base_hpa,
-			(void *)vm->sworld_control.sworld_memory.base_gpa,
-			vm->sworld_control.sworld_memory.length,
-			(IA32E_EPT_R_BIT |
-			 IA32E_EPT_W_BIT |
-			 IA32E_EPT_X_BIT |
-			 IA32E_EPT_WB));
-
-}
 #endif
 
 static void save_world_ctx(struct run_context *context)
@@ -316,33 +278,6 @@ static void copy_smc_param(struct run_context *prev_ctx,
 	next_ctx->guest_cpu_regs.regs.rbx = prev_ctx->guest_cpu_regs.regs.rbx;
 }
 
-void switch_world(struct vcpu *vcpu, int next_world)
-{
-	struct vcpu_arch *arch_vcpu = &vcpu->arch_vcpu;
-
-	/* save previous world context */
-	save_world_ctx(&arch_vcpu->contexts[!next_world]);
-
-	/* load next world context */
-	load_world_ctx(&arch_vcpu->contexts[next_world]);
-
-	/* Copy SMC parameters: RDI, RSI, RDX, RBX */
-	copy_smc_param(&arch_vcpu->contexts[!next_world],
-			&arch_vcpu->contexts[next_world]);
-
-	/* load EPTP for next world */
-	if (next_world == NORMAL_WORLD) {
-		exec_vmwrite64(VMX_EPT_POINTER_FULL,
-			vcpu->vm->arch_vm.nworld_eptp | (3UL<<3) | 6UL);
-	} else {
-		exec_vmwrite64(VMX_EPT_POINTER_FULL,
-			vcpu->vm->arch_vm.sworld_eptp | (3UL<<3) | 6UL);
-	}
-
-	/* Update world index */
-	arch_vcpu->cur_context = next_world;
-}
-
 /* Put key_info and trusty_startup_param in the first Page of Trusty
  * runtime memory
  */
@@ -432,6 +367,59 @@ static bool init_secure_world_env(struct vcpu *vcpu,
 	return setup_trusty_info(vcpu, size, base_hpa);
 }
 
+/**
+ * @defgroup trusty_apis Trusty APIs
+ *
+ * This is a special group that includes all APIs
+ * related to Trusty
+ *
+ * @{
+ */
+/**
+ * @brief Switch World between Secure World and Normal World
+ *
+ * Do context switch between Secure World and Normal World.
+ *
+ * @param vcpu pointer to a VCPU which need to do World switch
+ * @param next_world the world ID of next world
+ *
+ */
+void switch_world(struct vcpu *vcpu, int next_world)
+{
+	struct vcpu_arch *arch_vcpu = &vcpu->arch_vcpu;
+
+	/* save previous world context */
+	save_world_ctx(&arch_vcpu->contexts[!next_world]);
+
+	/* load next world context */
+	load_world_ctx(&arch_vcpu->contexts[next_world]);
+
+	/* Copy SMC parameters: RDI, RSI, RDX, RBX */
+	copy_smc_param(&arch_vcpu->contexts[!next_world],
+			&arch_vcpu->contexts[next_world]);
+
+	/* load EPTP for next world */
+	if (next_world == NORMAL_WORLD) {
+		exec_vmwrite64(VMX_EPT_POINTER_FULL,
+			vcpu->vm->arch_vm.nworld_eptp | (3UL<<3) | 6UL);
+	} else {
+		exec_vmwrite64(VMX_EPT_POINTER_FULL,
+			vcpu->vm->arch_vm.sworld_eptp | (3UL<<3) | 6UL);
+	}
+
+	/* Update world index */
+	arch_vcpu->cur_context = next_world;
+}
+
+/**
+ * @brief Initialize trusty
+ *
+ * Initialize Execution Environment for Trusty.
+ *
+ * @param vcpu pointer to a VCPU which trusty will boot on
+ * @param param GPA pointed to boot param
+ *
+ */
 bool initialize_trusty(struct vcpu *vcpu, uint64_t param)
 {
 	uint64_t trusty_entry_gpa, trusty_base_gpa, trusty_base_hpa;
@@ -490,6 +478,56 @@ bool initialize_trusty(struct vcpu *vcpu, uint64_t param)
 	return false;
 }
 
+#ifndef WORKAROUND_FOR_TRUSTY_4G_MEM
+/**
+ * @brief Destroy Secure World
+ *
+ * 1. Clear trusty's memory in case of sensitive information leak
+ * 2. Restore memory to SOS
+ *
+ * @param vm pointer to a VM with 2 Worlds
+ *
+ */
+void  destroy_secure_world(struct vm *vm)
+{
+	struct map_params  map_params;
+	struct vm *vm0 = get_vm_from_vmid(0);
+
+	if (vm0 == NULL) {
+		pr_err("Parse vm0 context failed.");
+		return;
+	}
+
+	/* clear trusty memory space */
+	(void)memset(HPA2HVA(vm->sworld_control.sworld_memory.base_hpa),
+			0, vm->sworld_control.sworld_memory.length);
+
+	/* restore memory to SOS ept mapping */
+	map_params.page_table_type = PTT_EPT;
+	map_params.pml4_base = HPA2HVA(vm0->arch_vm.nworld_eptp);
+	map_params.pml4_inverted = HPA2HVA(vm0->arch_vm.m2p);
+
+	map_mem(&map_params, (void *)vm->sworld_control.sworld_memory.base_hpa,
+			(void *)vm->sworld_control.sworld_memory.base_gpa,
+			vm->sworld_control.sworld_memory.length,
+			(IA32E_EPT_R_BIT |
+			 IA32E_EPT_W_BIT |
+			 IA32E_EPT_X_BIT |
+			 IA32E_EPT_WB));
+
+}
+#endif
+
+/**
+ * @brief Set dseed for Trusty
+ *
+ * Copy dseed to global variable g_key_info.
+ * If input dseed is invalid, then use fake seed.
+ *
+ * @param dseed input dseed pointer
+ * @param dseed_num number of input dseed
+ *
+ */
 void trusty_set_dseed(void *dseed, uint8_t dseed_num)
 {
 	/* Use fake seed if input param is invalid */

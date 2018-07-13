@@ -108,7 +108,9 @@ be updated.
    :name: EPT hierarchy
 
 API
-===
+***
+
+Trusty related APIs
 
 .. doxygengroup:: trusty_apis
    :project: Project ACRN
