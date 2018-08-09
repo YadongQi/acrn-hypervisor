@@ -7,6 +7,8 @@
 #include <hypervisor.h>
 #include <hkdf.h>
 
+#define ACRN_DBG_TRUSTY 6U
+
 #define TRUSTY_VERSION   1U
 #define TRUSTY_VERSION_2 2U
 
@@ -92,9 +94,9 @@ static void create_secure_world_ept(struct vm *vm, uint64_t gpa_orig,
 		return;
 	}
 
-	if (!vm->sworld_control.sworld_enabled
+	if (!vm->sworld_control.flag.supported
 			|| vm->arch_vm.sworld_eptp != NULL) {
-		pr_err("Sworld is not enabled or Sworld eptp is not NULL");
+		pr_err("Sworld is not supported or Sworld eptp is not NULL");
 		return;
 	}
 
@@ -164,8 +166,9 @@ static void create_secure_world_ept(struct vm *vm, uint64_t gpa_orig,
 			gpa, size);
 
 	/* Backup secure world info, will be used when
-	 * destroy secure world */
-	vm->sworld_control.sworld_memory.base_gpa = gpa;
+	 * destroy secure world and suspend UOS */
+	vm->sworld_control.sworld_memory.base_gpa_in_sos = gpa;
+	vm->sworld_control.sworld_memory.base_gpa_in_uos = gpa_orig;
 	vm->sworld_control.sworld_memory.base_hpa = hpa;
 	vm->sworld_control.sworld_memory.length = size;
 
@@ -194,7 +197,7 @@ void  destroy_secure_world(struct vm *vm)
 	map_params.pml4_inverted = vm0->arch_vm.m2p;
 
 	map_mem(&map_params, (void *)vm->sworld_control.sworld_memory.base_hpa,
-			(void *)vm->sworld_control.sworld_memory.base_gpa,
+		(void *)vm->sworld_control.sworld_memory.base_gpa_in_sos,
 			vm->sworld_control.sworld_memory.length,
 			(IA32E_EPT_R_BIT |
 			 IA32E_EPT_W_BIT |
@@ -429,7 +432,7 @@ bool initialize_trusty(struct vcpu *vcpu, uint64_t param)
 	}
 
 	if (boot_param.version > TRUSTY_VERSION_2) {
-		pr_err("%s: Version(%u) not supported!\n",
+		dev_dbg(ACRN_DBG_TRUSTY, "%s: Version(%u) not supported!\n",
 				__func__, boot_param.version);
 		return false;
 	}
@@ -489,6 +492,30 @@ void trusty_set_dseed(void *dseed, uint8_t dseed_num)
 	(void)memcpy_s(&g_key_info.dseed_list,
 			sizeof(struct seed_info) * dseed_num,
 			dseed, sizeof(struct seed_info) * dseed_num);
+}
+
+void save_sworld_context(struct vcpu *vcpu)
+{
+	memcpy_s(&vcpu->vm->sworld_snapshot,
+			sizeof(struct cpu_context),
+			&vcpu->arch_vcpu.contexts[SECURE_WORLD],
+			sizeof(struct cpu_context));
+}
+
+void restore_sworld_context(struct vcpu *vcpu)
+{
+	struct secure_world_control *sworld_ctl =
+		&vcpu->vm->sworld_control;
+
+	create_secure_world_ept(vcpu->vm,
+		sworld_ctl->sworld_memory.base_gpa_in_uos,
+		sworld_ctl->sworld_memory.length,
+		TRUSTY_EPT_REBASE_GPA);
+
+	memcpy_s(&vcpu->arch_vcpu.contexts[SECURE_WORLD],
+			sizeof(struct cpu_context),
+			&vcpu->vm->sworld_snapshot,
+			sizeof(struct cpu_context));
 }
 
 /**

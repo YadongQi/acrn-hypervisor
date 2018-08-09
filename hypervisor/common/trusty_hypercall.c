@@ -7,6 +7,8 @@
 #include <hypervisor.h>
 #include <hypercall.h>
 
+#define ACRN_DBG_TRUSTY_HYCALL 6U
+
 /* this hcall is only come from trusty enabled vcpu itself, and cannot be
  * called from other vcpus
  */
@@ -15,18 +17,21 @@ int32_t hcall_world_switch(struct vcpu *vcpu)
 	int32_t next_world_id = !(vcpu->arch_vcpu.cur_context);
 
 	if (next_world_id >= NR_WORLD) {
-		pr_err("%s world_id %d exceed max number of Worlds\n",
+		dev_dbg(ACRN_DBG_TRUSTY_HYCALL,
+			"%s world_id %d exceed max number of Worlds\n",
 			__func__, next_world_id);
 		return -EINVAL;
 	}
 
-	if (!vcpu->vm->sworld_control.sworld_enabled) {
-		pr_err("%s, Secure World is not enabled!\n", __func__);
+	if (!vcpu->vm->sworld_control.flag.supported) {
+		dev_dbg(ACRN_DBG_TRUSTY_HYCALL,
+			"Secure World is not supported!\n");
 		return -EPERM;
 	}
 
-	if (vcpu->vm->arch_vm.sworld_eptp == NULL) {
-		pr_err("%s, Trusty is not initialized!\n", __func__);
+	if (!vcpu->vm->sworld_control.flag.active) {
+		dev_dbg(ACRN_DBG_TRUSTY_HYCALL,
+			"Trusty is not initialized!\n");
 		return -EPERM;
 	}
 
@@ -39,24 +44,60 @@ int32_t hcall_world_switch(struct vcpu *vcpu)
  */
 int32_t hcall_initialize_trusty(struct vcpu *vcpu, uint64_t param)
 {
-	if (!vcpu->vm->sworld_control.sworld_enabled) {
-		pr_err("%s, Secure World is not enabled!\n", __func__);
+	if (!vcpu->vm->sworld_control.flag.supported) {
+		dev_dbg(ACRN_DBG_TRUSTY_HYCALL,
+			"Secure World is not supported!\n");
 		return -EPERM;
 	}
 
-	if (vcpu->vm->arch_vm.sworld_eptp != NULL) {
-		pr_err("%s, Trusty already initialized!\n", __func__);
+	if (vcpu->vm->sworld_control.flag.active) {
+		dev_dbg(ACRN_DBG_TRUSTY_HYCALL,
+			"Trusty already initialized!\n");
 		return -EPERM;
 	}
 
 	if (vcpu->arch_vcpu.cur_context != NORMAL_WORLD) {
-		pr_err("%s, must initialize Trusty from Normal World!\n",
+		dev_dbg(ACRN_DBG_TRUSTY_HYCALL,
+			"%s, must initialize Trusty from Normal World!\n",
 			__func__);
 		return -EPERM;
 	}
 
 	if (!initialize_trusty(vcpu, param)) {
 		return -ENODEV;
+	}
+
+	vcpu->vm->sworld_control.flag.active = 1UL;
+
+	return 0;
+}
+
+int64_t hcall_save_restore_sworld_ctx(struct vcpu *vcpu)
+{
+	struct vm *vm = vcpu->vm;
+
+	if (!vm->sworld_control.flag.supported) {
+		dev_dbg(ACRN_DBG_TRUSTY_HYCALL,
+			"Secure World is not supported!\n");
+		return -EPERM;
+	}
+
+	/* Currently, Secure World is only running on vCPU0 */
+	if (!is_vcpu_bsp(vcpu)) {
+		dev_dbg(ACRN_DBG_TRUSTY_HYCALL,
+			"This hypercall is only allowed from vcpu0!");
+		return -EPERM;
+	}
+
+	if (vm->sworld_control.flag.active) {
+		save_sworld_context(vcpu);
+		vm->sworld_control.flag.ctx_saved = 1UL;
+	} else {
+		if (vm->sworld_control.flag.ctx_saved) {
+			restore_sworld_context(vcpu);
+			vm->sworld_control.flag.ctx_saved = 0UL;
+			vm->sworld_control.flag.active = 1UL;
+		}
 	}
 
 	return 0;

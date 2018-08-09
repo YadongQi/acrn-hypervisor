@@ -153,6 +153,13 @@ struct vm {
 	unsigned char GUID[16];
 	struct secure_world_control sworld_control;
 
+	/* Secure World's snapshot
+	 * Currently, Secure World is only running on vcpu[0],
+	 * so the snapshot only stores the vcpu0's run_context
+	 * of secure world.
+	 */
+	struct cpu_context sworld_snapshot;
+
 	uint32_t vcpuid_entry_nr, vcpuid_level, vcpuid_xlevel;
 	struct vcpuid_entry vcpuid_entries[MAX_VM_VCPUID_ENTRIES];
 #ifdef CONFIG_PARTITION_MODE
@@ -167,8 +174,8 @@ struct vm_description {
 	uint16_t               *vm_pcpu_ids;
 	unsigned char          GUID[16]; /* GUID of the vm will be created */
 	uint16_t               vm_hw_num_cores;   /* Number of virtual cores */
-	/* Whether secure world is enabled for current VM. */
-	bool                   sworld_enabled;
+	/* Whether secure world is supported for current VM. */
+	bool                   sworld_supported;
 #ifdef CONFIG_PARTITION_MODE
 	struct mptable_info	*mptable;
 #endif
