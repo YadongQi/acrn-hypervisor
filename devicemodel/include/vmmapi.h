@@ -63,6 +63,7 @@ struct vmctx {
 	void *atkbdc_base;
 	void *vrtc;
 	void *ioc_dev;
+	void *tpm_dev;
 };
 
 /*
