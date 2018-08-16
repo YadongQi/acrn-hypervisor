@@ -53,4 +53,8 @@ int swtpm_stop(void);
 void init_tpm_crb(struct vmctx *ctx);
 void deinit_tpm_crb(struct vmctx *ctx);
 
+/* APIs by tpm.c */
+void init_vtpm2(struct vmctx *ctx);
+int acrn_parse_vtpm2(char *arg);
+
 #endif
