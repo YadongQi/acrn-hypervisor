@@ -61,6 +61,7 @@
 #include "ioc.h"
 #include "pm.h"
 #include "atomic.h"
+#include "tpm.h"
 
 #define GUEST_NIO_PORT		0x488	/* guest upcalls via i/o port */
 
@@ -160,6 +161,7 @@ usage(int code)
 		"       --vsbl: vsbl file path\n"
 		"       --part_info: guest partition info file path\n"
 		"       --enable_trusty: enable trusty for guest\n"
+		"       --vtpm2: Virtual TPM2 args: path=xxxx\n"
 		"       --ptdev_no_reset: disable reset check for ptdev\n",
 		progname, (int)strlen(progname), "", (int)strlen(progname), "",
 		(int)strlen(progname), "");
@@ -441,6 +443,8 @@ vm_init_vdevs(struct vmctx *ctx)
 	if (ret < 0)
 		goto pci_fail;
 
+	init_vtpm2(ctx);
+
 	return 0;
 pci_fail:
 	monitor_close();
@@ -687,6 +691,7 @@ enum {
 	CMD_OPT_PART_INFO,
 	CMD_OPT_TRUSTY_ENABLE,
 	CMD_OPT_PTDEV_NO_RESET,
+	CMD_OPT_VTPM2,
 };
 
 static struct option long_options[] = {
@@ -723,6 +728,7 @@ static struct option long_options[] = {
 					CMD_OPT_TRUSTY_ENABLE},
 	{"ptdev_no_reset",	no_argument,		0,
 		CMD_OPT_PTDEV_NO_RESET},
+	{"vtpm2",		required_argument,	0, CMD_OPT_VTPM2},
 	{0,			0,			0,  0  },
 };
 
@@ -880,6 +886,12 @@ main(int argc, char *argv[])
 			break;
 		case CMD_OPT_PTDEV_NO_RESET:
 			ptdev_no_reset(true);
+			break;
+		case CMD_OPT_VTPM2:
+			if (acrn_parse_vtpm2(optarg) != 0) {
+				errx(EX_USAGE, "invalid vtpm2 param %s", optarg);
+				exit(1);
+			}
 			break;
 		case 'h':
 			usage(0);
