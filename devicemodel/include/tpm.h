@@ -58,4 +58,14 @@ enum {
 #define TPM_CRB_MMIO_SIZE 0x1000U
 #define TPM_CRB_CTRL_ADDR (TPM_CRB_MMIO_ADDR + CRB_REGS_CTRL_REQ_OFF)
 
+/* APIs by tpm.c */
+/* Initialize Virtual TPM2 */
+void init_vtpm2(struct vmctx *ctx);
+
+/* Deinitialize Virtual TPM2 */
+void deinit_vtpm2(struct vmctx *ctx);
+
+/* Parse Virtual TPM option from command line */
+int acrn_parse_vtpm2(char *arg);
+
 #endif
