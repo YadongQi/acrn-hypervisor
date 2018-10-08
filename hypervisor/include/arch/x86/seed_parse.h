@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef HOB_PARSE_H_
-#define HOB_PARSE_H_
+#ifndef SEED_PARSE_H_
+#define SEED_PARSE_H_
 
 #define SEED_ENTRY_TYPE_SVNSEED         0x1U
 #define SEED_ENTRY_TYPE_RPMBSEED        0x2U
@@ -41,6 +41,24 @@ struct seed_entry {
 	uint8_t seed[0];
 };
 
-void parse_seed_list(struct seed_list_hob *seed_hob);
+void parse_seed_list_sbl(struct seed_list_hob *seed_hob);
 
-#endif /* HOB_PARSE_H_ */
+
+#define ABL_SEED_LEN 32U
+struct abl_seed_info {
+	uint8_t svn;
+	uint8_t reserved[3];
+	uint8_t seed[ABL_SEED_LEN];
+};
+
+#define ABL_SEED_LIST_MAX 4U
+struct dev_sec_info {
+	uint32_t size_of_this_struct;
+	uint32_t version;
+	uint32_t num_seeds;
+	struct abl_seed_info seed_list[ABL_SEED_LIST_MAX];
+};
+
+void parse_seed_list_abl(void *boot_params, uint8_t *serial, uint32_t serial_len);
+
+#endif /* SEED_PARSE_H_ */
