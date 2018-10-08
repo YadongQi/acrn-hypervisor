@@ -7,7 +7,7 @@
 #include <hypervisor.h>
 #include <multiboot.h>
 #include <zeropage.h>
-#include <hob_parse.h>
+#include <seed_parse.h>
 
 #define BOOT_ARGS_LOAD_ADDR				0x24EFC000
 
@@ -15,7 +15,13 @@
 
 #define MAX_BOOT_PARAMS_LEN 64U
 
-static const char *boot_params_arg = "ImageBootParamsAddr=";
+#define BOOT_PARAMS_SBL 0U
+#define BOOT_PARAMS_ABL 1U
+static const char *boot_params_arg[3] = {
+	"ImageBootParamsAddr=",
+	"dev_sec_info.param_addr=",
+	NULL
+};
 
 struct image_boot_params {
 	uint32_t size_of_this_struct;
@@ -132,43 +138,69 @@ static void *get_kernel_load_addr(void *kernel_src_addr)
  *    vm            pointer to vm structure
  *    cmdline       pointer to cmdline string
  *
+ * output:
+ *    index         pointer to argument index
+ *
  * return value:
- *    boot_params   HVA of image_boot_params if parse success, or
+ *    param_addr    HVA of image_boot_params if parse success, or
  *                  else a NULL pointer.
  */
-static void *parse_image_boot_params(struct vm *vm, char *cmdline)
+static void *parse_image_boot_params(struct vm *vm, char *cmdline, uint32_t *index)
 {
 	char *arg, *arg_end;
 	char *param;
-	uint32_t len;
+	void *param_addr;
 	struct image_boot_params *boot_params;
+	uint32_t len;
+	uint32_t i = 0;
 
 	if (cmdline == NULL) {
 		goto fail;
 	}
 
-	len = strnlen_s(boot_params_arg, MAX_BOOT_PARAMS_LEN);
-	arg = strstr_s(cmdline, MEM_2K, boot_params_arg, len);
+	while (boot_params_arg[i] != NULL) {
+		len = strnlen_s(boot_params_arg[i], MAX_BOOT_PARAMS_LEN);
+		arg = strstr_s(cmdline, MEM_2K, boot_params_arg[i], len);
+		if (arg)
+			break;
+		i++;
+	}
+
 	if (arg == NULL) {
 		goto fail;
 	}
 
+	if (index) {
+		*index = i;
+	}
+
 	param = arg + len;
-	boot_params = (struct image_boot_params *)hpa2hva(strtoul_hex(param));
-	if (boot_params == NULL) {
+	param_addr = (void *)hpa2hva(strtoul_hex(param));
+	if (param_addr == NULL) {
 		goto fail;
 	}
 
-	parse_seed_list((struct seed_list_hob *)hpa2hva(
+	switch (i) {
+	case BOOT_PARAMS_SBL:
+		boot_params = (struct image_boot_params *)param_addr;
+		parse_seed_list_sbl((struct seed_list_hob *)hpa2hva(
 				boot_params->p_seed_list));
 
-	/*
-	 * Convert the addresses to SOS GPA since this structure will be used
-	 * in SOS.
-	 */
-	boot_params->p_seed_list = hpa2gpa(vm, boot_params->p_seed_list);
-	boot_params->p_platform_info =
+		/*
+		 * Convert the addresses to SOS GPA since this structure will
+		 * be used in SOS.
+		 */
+		boot_params->p_seed_list =
+				hpa2gpa(vm, boot_params->p_seed_list);
+		boot_params->p_platform_info =
 				hpa2gpa(vm, boot_params->p_platform_info);
+		break;
+	case BOOT_PARAMS_ABL:
+		parse_seed_list_abl(param_addr);
+		break;
+	default:
+		goto fail;
+	}
 
 	/*
 	 * Replace original arguments with spaces since SOS's GPA is not
@@ -180,10 +212,10 @@ static void *parse_image_boot_params(struct vm *vm, char *cmdline)
 							strnlen_s(arg, MEM_2K);
 	(void)memset(arg, ' ', len);
 
-	return (void *)boot_params;
+	return (void *)param_addr;
 
 fail:
-	parse_seed_list(NULL);
+	parse_seed_list_sbl(NULL);
 	return NULL;
 }
 
@@ -287,12 +319,14 @@ int init_vm_boot_info(struct vm *vm)
 		char *cmd_src, *cmd_dst;
 		uint32_t off = 0U;
 		void *boot_params_addr;
+		uint32_t index = 0U;
 		char buf[MAX_BOOT_PARAMS_LEN];
 
 		cmd_dst = kernel_cmdline;
 		cmd_src = hpa2hva((uint64_t)mbi->mi_cmdline);
 
-		boot_params_addr = parse_image_boot_params(vm, cmd_src);
+		boot_params_addr = parse_image_boot_params(vm, cmd_src, &index);
+
 		/*
 		 * Convert ImageBootParamsAddr to SOS GPA and append to
 		 * kernel cmdline
@@ -300,7 +334,7 @@ int init_vm_boot_info(struct vm *vm)
 		if (boot_params_addr != NULL) {
 			(void)memset(buf, 0U, sizeof(buf));
 			snprintf(buf, MAX_BOOT_PARAMS_LEN, "%s0x%X ",
-				boot_params_arg, hva2gpa(vm, boot_params_addr));
+				boot_params_arg[index], hva2gpa(vm, boot_params_addr));
 			(void)strncpy_s(cmd_dst, MEM_2K, buf,
 						MAX_BOOT_PARAMS_LEN);
 			off = strnlen_s(cmd_dst, MEM_2K);
