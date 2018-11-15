@@ -113,6 +113,61 @@ void rebuild_vm0_e820(void)
 		entry->type = new_entry.type;
 	}
 
+{
+	uint64_t sos_tee_start_pa = 0x12300000;
+	uint64_t sos_tee_end_pa = sos_tee_start_pa + 0x3000000;
+	for (i = 0U; i < e820_entries_count; i++) {
+		entry = &e820[i];
+		entry_start = entry->baseaddr;
+		entry_end = entry->baseaddr + entry->length;
+
+		/* No need handle in these cases*/
+		if ((entry->type != E820_TYPE_RAM) || (entry_end <= sos_tee_start_pa)
+				|| (entry_start >= sos_tee_end_pa)) {
+			continue;
+		}
+
+		/* filter out sos tee mem and adjust length of this entry*/
+		if ((entry_start < sos_tee_start_pa) && (entry_end <= sos_tee_end_pa)) {
+			entry->length = sos_tee_start_pa - entry_start;
+			continue;
+		}
+		/* filter out sos tee mem and need to create a new entry*/
+		if ((entry_start < sos_tee_start_pa) && (entry_end > sos_tee_end_pa)) {
+			entry->length = sos_tee_start_pa - entry_start;
+			new_entry.baseaddr = sos_tee_end_pa;
+			new_entry.length = entry_end - sos_tee_end_pa;
+			new_entry.type = E820_TYPE_RAM;
+			continue;
+		}
+		/* This entry is within the range of sos tee mem
+		 * change to E820_TYPE_RESERVED
+		 */
+		if ((entry_start >= sos_tee_start_pa) && (entry_end <= sos_tee_end_pa)) {
+			entry->type = E820_TYPE_RESERVED;
+			continue;
+		}
+
+		if ((entry_start >= sos_tee_start_pa) && (entry_start < sos_tee_end_pa)
+				&& (entry_end > sos_tee_end_pa)) {
+			entry->baseaddr = sos_tee_end_pa;
+			entry->length = entry_end - sos_tee_end_pa;
+			continue;
+		}
+
+	}
+	if (new_entry.length > 0UL) {
+		e820_entries_count++;
+		ASSERT(e820_entries_count <= E820_MAX_ENTRIES,
+				"e820 entry overflow");
+		entry = &e820[e820_entries_count - 1];
+		entry->baseaddr = new_entry.baseaddr;
+		entry->length = new_entry.length;
+		entry->type = new_entry.type;
+	}
+	e820_mem.total_mem_size -= 0x1000000;
+}
+
 	e820_mem.total_mem_size -= CONFIG_HV_RAM_SIZE;
 }
 

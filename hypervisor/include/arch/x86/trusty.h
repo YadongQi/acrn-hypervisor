@@ -129,6 +129,8 @@ struct trusty_startup_param {
 void switch_world(struct acrn_vcpu *vcpu, int32_t next_world);
 bool initialize_trusty(struct acrn_vcpu *vcpu, uint64_t param);
 void destroy_secure_world(struct acrn_vm *vm, bool need_clr_mem);
+void save_world_ctx(struct acrn_vcpu *vcpu, struct ext_context *ext_ctx);
+void load_world_ctx(struct acrn_vcpu *vcpu, const struct ext_context *ext_ctx);
 void save_sworld_context(struct acrn_vcpu *vcpu);
 void restore_sworld_context(struct acrn_vcpu *vcpu);
 void trusty_set_dseed(const void *dseed, uint8_t dseed_num);

@@ -21,6 +21,7 @@
 #include <vlapic.h>
 #include <vcpu.h>
 #include <trusty.h>
+#include <tee.h>
 #include <guest_pm.h>
 #include <host_pm.h>
 #include <vpic.h>
