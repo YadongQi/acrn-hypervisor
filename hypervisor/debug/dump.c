@@ -58,7 +58,7 @@ static const char *const excp_names[32] = {
  */
 struct intr_excp_ctx *crash_ctx;
 
-static void dump_guest_reg(struct acrn_vcpu *vcpu)
+void dump_guest_reg(struct acrn_vcpu *vcpu)
 {
 	printf("\n\n================================================");
 	printf("================================\n\n");
