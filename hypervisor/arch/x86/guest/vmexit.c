@@ -193,6 +193,11 @@ int32_t vmexit_handler(struct acrn_vcpu *vcpu)
 
 		/* Log details for exit */
 		pr_dbg("Exit Reason: 0x%016llx ", vcpu->arch.exit_reason);
+#if 0
+		if (vcpu->arch.cur_context == SECURE_WORLD && basic_exit_reason != 0x1e && basic_exit_reason != 0x1) {
+			pr_acrnlog("CPU[%d], VCPU[%d]: vmexit, reason=%d ", vcpu->pcpu_id, vcpu->vcpu_id, vcpu->arch.exit_reason);
+		}
+#endif
 
 		/* Ensure exit reason is within dispatch table */
 		if (basic_exit_reason >= ARRAY_SIZE(dispatch_table)) {

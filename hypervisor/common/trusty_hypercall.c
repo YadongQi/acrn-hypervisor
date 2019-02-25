@@ -105,3 +105,13 @@ int32_t hcall_save_restore_sworld_ctx(struct acrn_vcpu *vcpu)
 
 	return ret;
 }
+
+extern void print_vmcs_all(void);
+int32_t hcall_print_vmcs(struct acrn_vcpu *vcpu)
+{
+	pr_acrnlog("PRINT VMCS: VM[%d], VCPU[%d], PCPU[%d]", vcpu->vm->vm_id, vcpu->vcpu_id, vcpu->pcpu_id);
+	print_vmcs_all();
+	pr_acrnlog("PRINT VMCS done.\n");
+
+	return 0;
+}

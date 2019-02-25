@@ -172,6 +172,10 @@ static int32_t dispatch_hypercall(struct acrn_vcpu *vcpu)
 		ret = hcall_vm_intr_monitor(vm, (uint16_t)param1, param2);
 		break;
 
+	case HC_PRINT_VMCS:
+		ret = hcall_print_vmcs(vcpu);
+		break;
+
 	default:
 		ret = hcall_debug(vm, param1, param2, hypcall_id);
 		break;

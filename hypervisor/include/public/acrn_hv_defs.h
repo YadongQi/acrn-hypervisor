@@ -76,6 +76,7 @@
 #define HC_INITIALIZE_TRUSTY        BASE_HC_ID(HC_ID, HC_ID_TRUSTY_BASE + 0x00UL)
 #define HC_WORLD_SWITCH             BASE_HC_ID(HC_ID, HC_ID_TRUSTY_BASE + 0x01UL)
 #define HC_SAVE_RESTORE_SWORLD_CTX  BASE_HC_ID(HC_ID, HC_ID_TRUSTY_BASE + 0x02UL)
+#define HC_PRINT_VMCS               BASE_HC_ID(HC_ID, HC_ID_TRUSTY_BASE + 0x0FUL)
 
 /* Power management */
 #define HC_ID_PM_BASE               0x80UL

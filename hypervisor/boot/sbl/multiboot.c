@@ -224,6 +224,10 @@ int32_t init_vm_boot_info(struct acrn_vm *vm)
 					}
 
 					cmd_dst += off;
+					strncpy_s(cmd_dst, MEM_2K, " nokaslr ", 10);
+					off = strnlen_s(cmd_dst, MEM_2K);
+
+					cmd_dst += off;
 					(void)strncpy_s(cmd_dst, MEM_2K - off, (const char *)cmd_src,
 						strnlen_s(cmd_src, MEM_2K - off));
 					off = strnlen_s(cmd_dst, MEM_2K - off);

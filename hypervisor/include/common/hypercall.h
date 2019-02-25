@@ -417,6 +417,9 @@ int32_t hcall_save_restore_sworld_ctx(struct acrn_vcpu *vcpu);
  */
 int32_t hcall_set_callback_vector(const struct acrn_vm *vm, uint64_t param);
 
+
+int32_t hcall_print_vmcs(struct acrn_vcpu *vcpu);
+
 /**
  * @}
  */

@@ -2532,3 +2532,17 @@ int32_t tpr_below_threshold_vmexit_handler(__unused struct acrn_vcpu *vcpu)
 	pr_err("Unhandled %s.", __func__);
 	return 0;
 }
+
+void vcpu_dump_virr_visr(struct acrn_vcpu *vcpu)
+{
+	struct lapic_reg *irrptr = &((vcpu_vlapic(vcpu))->apic_page.irr[0]);
+	struct lapic_reg *isrptr = &((vcpu_vlapic(vcpu))->apic_page.isr[0]);
+
+	for (uint8_t i = 0U; i < 8U; i++) {
+		printf("%s irr%u 0x%08x\n", __func__, i, irrptr[i].v);
+	}
+
+	for (uint8_t i = 0U; i < 8U; i++) {
+		printf("%s isr%u 0x%08x\n", __func__, i, isrptr[i].v);
+	}
+}

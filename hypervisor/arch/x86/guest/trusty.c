@@ -163,8 +163,8 @@ static void save_world_ctx(struct acrn_vcpu *vcpu, struct ext_context *ext_ctx)
 
 	/* VMCS GUEST field */
 	ext_ctx->tsc_offset = exec_vmread(VMX_TSC_OFFSET_FULL);
-	ext_ctx->vmx_cr0 = exec_vmread(VMX_GUEST_CR0);
-	ext_ctx->vmx_cr4 = exec_vmread(VMX_GUEST_CR4);
+	ext_ctx->vmx_cr0 = exec_vmread(VMX_CR0_GUEST_HOST_MASK);
+	ext_ctx->vmx_cr4 = exec_vmread(VMX_CR4_GUEST_HOST_MASK);
 	ext_ctx->vmx_cr0_read_shadow = exec_vmread(VMX_CR0_READ_SHADOW);
 	ext_ctx->vmx_cr4_read_shadow = exec_vmread(VMX_CR4_READ_SHADOW);
 	ext_ctx->cr3 = exec_vmread(VMX_GUEST_CR3);
@@ -226,8 +226,8 @@ static void load_world_ctx(struct acrn_vcpu *vcpu, const struct ext_context *ext
 	exec_vmwrite64(VMX_TSC_OFFSET_FULL, ext_ctx->tsc_offset);
 
 	/* VMCS GUEST field */
-	exec_vmwrite(VMX_GUEST_CR0, ext_ctx->vmx_cr0);
-	exec_vmwrite(VMX_GUEST_CR4, ext_ctx->vmx_cr4);
+	exec_vmwrite(VMX_CR0_GUEST_HOST_MASK, ext_ctx->vmx_cr0);
+	exec_vmwrite(VMX_CR4_GUEST_HOST_MASK, ext_ctx->vmx_cr4);
 	exec_vmwrite(VMX_CR0_READ_SHADOW, ext_ctx->vmx_cr0_read_shadow);
 	exec_vmwrite(VMX_CR4_READ_SHADOW, ext_ctx->vmx_cr4_read_shadow);
 	exec_vmwrite(VMX_GUEST_CR3, ext_ctx->cr3);
@@ -275,14 +275,21 @@ static void copy_smc_param(const struct run_context *prev_ctx,
 	next_ctx->guest_cpu_regs.regs.rbx = prev_ctx->guest_cpu_regs.regs.rbx;
 }
 
+void vcpu_dump_virr_visr(const struct acrn_vcpu *vcpu);
 void switch_world(struct acrn_vcpu *vcpu, int32_t next_world)
 {
 	struct acrn_vcpu_arch *arch = &vcpu->arch;
 
 	/* save previous world context */
+	arch->contexts[!next_world].run_ctx.cr0 = exec_vmread(VMX_GUEST_CR0);
+	arch->contexts[!next_world].run_ctx.cr4 = exec_vmread(VMX_GUEST_CR4);
+	CPU_CR_READ(cr2, &arch->contexts[!next_world].run_ctx.cr2);
 	save_world_ctx(vcpu, &arch->contexts[!next_world].ext_ctx);
 
 	/* load next world context */
+	exec_vmwrite(VMX_GUEST_CR0, arch->contexts[next_world].run_ctx.cr0);
+	exec_vmwrite(VMX_GUEST_CR4, arch->contexts[next_world].run_ctx.cr4);
+	CPU_CR_WRITE(cr2, arch->contexts[next_world].run_ctx.cr2);
 	load_world_ctx(vcpu, &arch->contexts[next_world].ext_ctx);
 
 	/* Copy SMC parameters: RDI, RSI, RDX, RBX */
@@ -294,7 +301,9 @@ void switch_world(struct acrn_vcpu *vcpu, int32_t next_world)
 		exec_vmwrite64(VMX_EPT_POINTER_FULL,
 			hva2hpa(vcpu->vm->arch_vm.nworld_eptp) |
 			(3UL << 3U) | 0x6UL);
-
+		//pr_acrnlog("VCPU VIRR VISR DUMP before switch back to NW!");
+		//vcpu_dump_virr_visr(vcpu);
+		//pr_acrnlog("VCPU VIRR VISR DUMP END");
 #ifndef CONFIG_L1D_FLUSH_VMENTRY_ENABLED
 		cpu_l1d_flush();
 #endif
@@ -396,14 +405,16 @@ static bool setup_trusty_info(struct acrn_vcpu *vcpu,
 			mem->first_page.startup_param.size_of_this_struct = sizeof(struct trusty_startup_param);
 			mem->first_page.startup_param.mem_size = mem_size;
 			mem->first_page.startup_param.tsc_per_ms = CYCLES_PER_MS;
-			mem->first_page.startup_param.trusty_mem_base = TRUSTY_EPT_REBASE_GPA;
+			//mem->first_page.startup_param.trusty_mem_base = TRUSTY_EPT_REBASE_GPA;
+			mem->first_page.startup_param.trusty_mem_base = mem_base_hpa;
 
 			/* According to trusty boot protocol, it will use RDI as the
 			 * address(GPA) of startup_param on boot. Currently, the startup_param
 			 * is put in the first page of trusty memory just followed by key_info.
 			 */
 			vcpu->arch.contexts[SECURE_WORLD].run_ctx.guest_cpu_regs.regs.rdi
-				= (uint64_t)TRUSTY_EPT_REBASE_GPA + sizeof(struct trusty_key_info);
+				= (uint64_t)mem_base_hpa + sizeof(struct trusty_key_info);
+				//= (uint64_t)TRUSTY_EPT_REBASE_GPA + sizeof(struct trusty_key_info);
 		}
 	}
 
@@ -426,7 +437,9 @@ static bool init_secure_world_env(struct acrn_vcpu *vcpu,
 	vcpu->arch.inst_len = 0U;
 	vcpu->arch.contexts[SECURE_WORLD].run_ctx.rip = entry_gpa;
 	vcpu->arch.contexts[SECURE_WORLD].run_ctx.guest_cpu_regs.regs.rsp =
-		TRUSTY_EPT_REBASE_GPA + size;
+		base_hpa + size;
+
+	pr_acrnlog("trusty: rip=%llx, rsp=%llx\n", vcpu->arch.contexts[SECURE_WORLD].run_ctx.rip, vcpu->arch.contexts[SECURE_WORLD].run_ctx.guest_cpu_regs.regs.rsp);
 
 	vcpu->arch.contexts[SECURE_WORLD].ext_ctx.tsc_offset = 0UL;
 
@@ -439,12 +452,88 @@ static bool init_secure_world_env(struct acrn_vcpu *vcpu,
 	return setup_trusty_info(vcpu, size, base_hpa);
 }
 
+static void init_tee_env(struct acrn_vcpu *vcpu, uint64_t rip, uint64_t rsp)
+{
+	struct ext_context *ectx;
+	struct run_context *ctx;
+	struct segment_sel *seg;
+	uint32_t entry_ctls;
+
+	ectx = &(vcpu->arch.contexts[SECURE_WORLD].ext_ctx);
+	ctx = &(vcpu->arch.contexts[SECURE_WORLD].run_ctx);
+
+	vcpu_set_efer(vcpu, 0ULL);
+
+	ctx->cr0 =(1ULL << 18) | (1ULL << 16) | (1ULL << 5) | (1ULL << 4) | (1ULL << 0);
+	//ectx->vmx_cr0 = ctx->cr0;
+	vcpu_set_cr0(vcpu, ctx->cr0);
+
+	//exec_vmwrite(VMX_CR0_MASK, 0x20);
+	//exec_vmwrite(VMX_CR0_READ_SHADOW, 0x11);
+	ectx->vmx_cr0 = 0U;
+	ectx->vmx_cr0_read_shadow = 0U;
+	ectx->vmx_cr4 = 0U;
+	ectx->vmx_cr4_read_shadow = 0U;
+
+
+	entry_ctls = exec_vmread32(VMX_ENTRY_CONTROLS);
+	entry_ctls &= ~VMX_ENTRY_CTLS_IA32E_MODE;
+	exec_vmwrite32(VMX_ENTRY_CONTROLS, entry_ctls);
+
+	ctx->cr4 = (1ULL << 13U);
+	//ectx->vmx_cr4 = ctx->cr4;
+
+	vcpu_set_rflags(vcpu, 1ULL << 1);
+
+	vcpu->arch.contexts[SECURE_WORLD].run_ctx.rip = rip;
+	vcpu_retain_rip(vcpu);
+
+	vcpu_set_rsp(vcpu, rsp);
+
+	ectx->cs.base = 0UL;
+	ectx->cs.limit = 0xFFFFFFFFU;
+	ectx->cs.attr = 0xc09bU;
+	ectx->cs.selector = 0x08U;
+
+	for (seg = &(ectx->ss); seg <= &(ectx->gs); seg++) {
+		seg->base = 0UL;
+		seg->limit = 0xFFFFFFFFU;
+		seg->attr = 0xc093U;
+		seg->selector = 0x10U;
+	}
+
+	ectx->tr.base = 0UL;
+	ectx->tr.limit = 0xFFFFFFFFU;
+	ectx->tr.attr = 0x808bU;
+	ectx->tr.selector = 0U;
+
+	ectx->ldtr.base = 0UL;
+	ectx->ldtr.limit = 0UL;
+	ectx->ldtr.attr = 0x10000U;
+	ectx->ldtr.selector = 0U;
+
+	ectx->gdtr.base = 0UL;
+	ectx->gdtr.limit = 0x0UL;
+
+	ectx->idtr.base = 0UL;
+	ectx->idtr.limit = 0x0UL;
+}
+
 bool initialize_trusty(struct acrn_vcpu *vcpu, const struct trusty_boot_param *boot_param)
 {
 	bool ret = true;
 	uint64_t trusty_entry_gpa, trusty_base_gpa, trusty_base_hpa;
 	uint32_t trusty_mem_size;
 	struct acrn_vm *vm = vcpu->vm;
+
+	pr_acrnlog("bp->version=%x, base_l=%x, entry_l=%x, size=%x, base_h=%x, entry_h=%x\n",
+			boot_param->version,
+			boot_param->base_addr,
+			boot_param->entry_point,
+			boot_param->mem_size,
+			boot_param->base_addr_high,
+			boot_param->entry_point_high
+			);
 
 	switch (boot_param->version) {
 	case TRUSTY_VERSION_2:
@@ -473,23 +562,37 @@ bool initialize_trusty(struct acrn_vcpu *vcpu, const struct trusty_boot_param *b
 			ret = false;
 		} else {
 			trusty_mem_size = boot_param->mem_size;
-			create_secure_world_ept(vm, trusty_base_gpa, trusty_mem_size,
-								TRUSTY_EPT_REBASE_GPA);
-			trusty_base_hpa = vm->sworld_control.sworld_memory.base_hpa;
+			//create_secure_world_ept(vm, trusty_base_gpa, trusty_mem_size,
+			//					trusty_base_gpa);
+			vm->arch_vm.sworld_eptp = vm->arch_vm.nworld_eptp;
+								//TRUSTY_EPT_REBASE_GPA);
+			pr_acrnlog("create ept for trusty done!\n");
+			//trusty_base_hpa = vm->sworld_control.sworld_memory.base_hpa;
+			trusty_base_hpa = gpa2hpa(vm, trusty_base_gpa);
 
 			exec_vmwrite64(VMX_EPT_POINTER_FULL,
 					hva2hpa(vm->arch_vm.sworld_eptp) | (3UL << 3U) | 0x6UL);
 
+			vcpu->arch.contexts[NORMAL_WORLD].run_ctx.cr0 = exec_vmread(VMX_GUEST_CR0);
+			vcpu->arch.contexts[NORMAL_WORLD].run_ctx.cr4 = exec_vmread(VMX_GUEST_CR4);
 			/* save Normal World context */
 			save_world_ctx(vcpu, &vcpu->arch.contexts[NORMAL_WORLD].ext_ctx);
 
 			/* init secure world environment */
 			if (init_secure_world_env(vcpu,
-				(trusty_entry_gpa - trusty_base_gpa) + TRUSTY_EPT_REBASE_GPA,
+				trusty_entry_gpa,
 				trusty_base_hpa, trusty_mem_size)) {
 
 				/* switch to Secure World */
 				vcpu->arch.cur_context = SECURE_WORLD;
+				init_tee_env(vcpu, trusty_entry_gpa, trusty_base_gpa + trusty_mem_size);
+				load_world_ctx(vcpu, &vcpu->arch.contexts[SECURE_WORLD].ext_ctx);
+				exec_vmwrite(VMX_GUEST_CR0, vcpu->arch.contexts[SECURE_WORLD].run_ctx.cr0);
+				exec_vmwrite(VMX_GUEST_CR4, vcpu->arch.contexts[SECURE_WORLD].run_ctx.cr4);
+				pr_acrnlog("trustyi tee: rip=%llx, rsp=%llx\n", vcpu->arch.contexts[SECURE_WORLD].run_ctx.rip, vcpu->arch.contexts[SECURE_WORLD].run_ctx.guest_cpu_regs.regs.rsp);
+				//pr_acrnlog("VCPU VIRR VISR DUMP before launch TRUSTY");
+				//vcpu_dump_virr_visr(vcpu);
+				//pr_acrnlog("VCPU VIRR VISR DUMP END");
 			} else {
 				ret = false;
 			}

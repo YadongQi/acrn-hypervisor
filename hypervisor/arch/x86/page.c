@@ -62,6 +62,7 @@ static struct page sos_vm_pml4_pages[PML4_PAGE_NUM(EPT_ADDRESS_SPACE(CONFIG_SOS_
 static struct page sos_vm_pdpt_pages[PDPT_PAGE_NUM(EPT_ADDRESS_SPACE(CONFIG_SOS_RAM_SIZE))];
 static struct page sos_vm_pd_pages[PD_PAGE_NUM(EPT_ADDRESS_SPACE(CONFIG_SOS_RAM_SIZE))];
 static struct page sos_vm_pt_pages[PT_PAGE_NUM(EPT_ADDRESS_SPACE(CONFIG_SOS_RAM_SIZE))];
+static struct page sos_sworld_pgtable_pages[TRUSTY_PGTABLE_PAGE_NUM(TRUSTY_RAM_SIZE)];
 
 /* uos_nworld_pml4_pages[i] is ...... of UOS i (whose vm_id = i +1) */
 static struct page uos_nworld_pml4_pages[CONFIG_MAX_VM_NUM - 1U][PML4_PAGE_NUM(EPT_ADDRESS_SPACE(CONFIG_UOS_RAM_SIZE))];
@@ -82,6 +83,7 @@ static union pgtable_pages_info ept_pages_info[CONFIG_MAX_VM_NUM] = {
 			.nworld_pdpt_base = sos_vm_pdpt_pages,
 			.nworld_pd_base = sos_vm_pd_pages,
 			.nworld_pt_base = sos_vm_pt_pages,
+			.sworld_pgtable_base = sos_sworld_pgtable_pages,
 		},
 	},
 };
@@ -160,6 +162,8 @@ void init_ept_mem_ops(struct acrn_vm *vm)
 		ept_pages_info[vm_id].ept.sworld_memory_base = uos_sworld_memory[vm_id - 1U];
 
 		vm->arch_vm.ept_mem_ops.get_sworld_memory_base = ept_get_sworld_memory_base;
+	} else {
+		ept_pages_info[vm_id].ept.sworld_pgtable_base = sos_sworld_pgtable_pages;
 	}
 	vm->arch_vm.ept_mem_ops.info = &ept_pages_info[vm_id];
 
