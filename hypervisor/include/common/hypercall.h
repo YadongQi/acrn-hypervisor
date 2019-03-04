@@ -387,6 +387,7 @@ int32_t hcall_world_switch(struct acrn_vcpu *vcpu);
  * @return 0 on success, non-zero on error.
  */
 int32_t hcall_initialize_trusty(struct acrn_vcpu *vcpu, uint64_t param);
+int32_t hcall_initialize_tee(struct acrn_vcpu *vcpu, uint64_t param);
 
 /**
  * @brief Save/Restore Context of Secure World.

@@ -189,6 +189,64 @@ static void create_sos_vm_e820(struct acrn_vm *vm)
 		}
 	}
 
+#if 1
+{
+	uint64_t sos_tee_start_pa = 0x20000000;
+	uint64_t sos_tee_end_pa = sos_tee_start_pa + 0x3000000;
+	p_e820 = (struct e820_entry *)get_e820_entry();
+	p_e820_mem = (struct e820_mem_params *)get_e820_mem_info();
+	for (i = 0U; i < entries_count; i++) {
+		entry = p_e820 + i;
+		entry_start = entry->baseaddr;
+		entry_end = entry->baseaddr + entry->length;
+
+		/* No need handle in these cases*/
+		if ((entry->type != E820_TYPE_RAM) || (entry_end <= sos_tee_start_pa)
+				|| (entry_start >= sos_tee_end_pa)) {
+			continue;
+		}
+
+		/* filter out sos tee mem and adjust length of this entry*/
+		if ((entry_start < sos_tee_start_pa) && (entry_end <= sos_tee_end_pa)) {
+			entry->length = sos_tee_start_pa - entry_start;
+			continue;
+		}
+		/* filter out sos tee mem and need to create a new entry*/
+		if ((entry_start < sos_tee_start_pa) && (entry_end > sos_tee_end_pa)) {
+			entry->length = sos_tee_start_pa - entry_start;
+			new_entry.baseaddr = sos_tee_end_pa;
+			new_entry.length = entry_end - sos_tee_end_pa;
+			new_entry.type = E820_TYPE_RAM;
+			continue;
+		}
+		/* This entry is within the range of sos tee mem
+		 * change to E820_TYPE_RESERVED
+		 */
+		if ((entry_start >= sos_tee_start_pa) && (entry_end <= sos_tee_end_pa)) {
+			entry->type = E820_TYPE_RESERVED;
+			continue;
+		}
+
+		if ((entry_start >= sos_tee_start_pa) && (entry_start < sos_tee_end_pa)
+				&& (entry_end > sos_tee_end_pa)) {
+			entry->baseaddr = sos_tee_end_pa;
+			entry->length = entry_end - sos_tee_end_pa;
+			continue;
+		}
+
+	}
+	if (new_entry.length > 0UL) {
+		entries_count++;
+		ASSERT(entries_count <= E820_MAX_ENTRIES, "e820 entry overflow");
+		entry = p_e820 + entries_count - 1;
+		entry->baseaddr = new_entry.baseaddr;
+		entry->length = new_entry.length;
+		entry->type = new_entry.type;
+	}
+	p_e820_mem->total_mem_size -= 0x3000000;
+}
+#endif
+
 	if (new_entry.length > 0UL) {
 		entries_count++;
 		ASSERT(entries_count <= E820_MAX_ENTRIES, "e820 entry overflow");
@@ -278,6 +336,7 @@ int32_t create_vm(uint16_t vm_id, struct acrn_vm_config *vm_config, struct acrn_
 	sanitize_pte((uint64_t *)vm->arch_vm.nworld_eptp);
 
 	if (is_sos_vm(vm)) {
+		vm->sworld_control.flag.supported = 1U;
 		/* Only for SOS_VM */
 		create_sos_vm_e820(vm);
 		prepare_sos_vm_memmap(vm);

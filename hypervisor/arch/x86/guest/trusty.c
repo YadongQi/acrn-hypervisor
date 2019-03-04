@@ -151,7 +151,7 @@ static inline void rstor_fxstore_guest_area(const struct ext_context *ext_ctx)
 	asm volatile("fxrstor (%0)" : : "r" (ext_ctx->fxstore_guest_area));
 }
 
-static void save_world_ctx(struct acrn_vcpu *vcpu, struct ext_context *ext_ctx)
+void save_world_ctx(struct acrn_vcpu *vcpu, struct ext_context *ext_ctx)
 {
 	uint32_t i;
 
@@ -163,8 +163,8 @@ static void save_world_ctx(struct acrn_vcpu *vcpu, struct ext_context *ext_ctx)
 
 	/* VMCS GUEST field */
 	ext_ctx->tsc_offset = exec_vmread(VMX_TSC_OFFSET_FULL);
-	ext_ctx->vmx_cr0 = exec_vmread(VMX_GUEST_CR0);
-	ext_ctx->vmx_cr4 = exec_vmread(VMX_GUEST_CR4);
+	ext_ctx->vmx_cr0 = exec_vmread(VMX_CR0_GUEST_HOST_MASK);
+	ext_ctx->vmx_cr4 = exec_vmread(VMX_CR4_GUEST_HOST_MASK);
 	ext_ctx->vmx_cr0_read_shadow = exec_vmread(VMX_CR0_READ_SHADOW);
 	ext_ctx->vmx_cr4_read_shadow = exec_vmread(VMX_CR4_READ_SHADOW);
 	ext_ctx->cr3 = exec_vmread(VMX_GUEST_CR3);
@@ -212,7 +212,7 @@ static void save_world_ctx(struct acrn_vcpu *vcpu, struct ext_context *ext_ctx)
 	}
 }
 
-static void load_world_ctx(struct acrn_vcpu *vcpu, const struct ext_context *ext_ctx)
+void load_world_ctx(struct acrn_vcpu *vcpu, const struct ext_context *ext_ctx)
 {
 	uint32_t i;
 
@@ -226,8 +226,8 @@ static void load_world_ctx(struct acrn_vcpu *vcpu, const struct ext_context *ext
 	exec_vmwrite64(VMX_TSC_OFFSET_FULL, ext_ctx->tsc_offset);
 
 	/* VMCS GUEST field */
-	exec_vmwrite(VMX_GUEST_CR0, ext_ctx->vmx_cr0);
-	exec_vmwrite(VMX_GUEST_CR4, ext_ctx->vmx_cr4);
+	exec_vmwrite(VMX_CR0_GUEST_HOST_MASK, ext_ctx->vmx_cr0);
+	exec_vmwrite(VMX_CR4_GUEST_HOST_MASK, ext_ctx->vmx_cr4);
 	exec_vmwrite(VMX_CR0_READ_SHADOW, ext_ctx->vmx_cr0_read_shadow);
 	exec_vmwrite(VMX_CR4_READ_SHADOW, ext_ctx->vmx_cr4_read_shadow);
 	exec_vmwrite(VMX_GUEST_CR3, ext_ctx->cr3);
@@ -280,20 +280,38 @@ void switch_world(struct acrn_vcpu *vcpu, int32_t next_world)
 	struct acrn_vcpu_arch *arch = &vcpu->arch;
 
 	/* save previous world context */
+	arch->contexts[!next_world].run_ctx.cr0 = exec_vmread(VMX_GUEST_CR0);
+	arch->contexts[!next_world].run_ctx.cr4 = exec_vmread(VMX_GUEST_CR4);
+	CPU_CR_READ(cr2, &arch->contexts[!next_world].run_ctx.cr2);
 	save_world_ctx(vcpu, &arch->contexts[!next_world].ext_ctx);
 
 	/* load next world context */
+	exec_vmwrite(VMX_GUEST_CR0, arch->contexts[next_world].run_ctx.cr0);
+	exec_vmwrite(VMX_GUEST_CR4, arch->contexts[next_world].run_ctx.cr4);
+	CPU_CR_WRITE(cr2, arch->contexts[next_world].run_ctx.cr2);
 	load_world_ctx(vcpu, &arch->contexts[next_world].ext_ctx);
+	//vcpu_set_cr0(vcpu, arch->contexts[next_world].run_ctx.cr0);
+	//vcpu_set_cr4(vcpu, arch->contexts[next_world].run_ctx.cr4);
 
 	/* Copy SMC parameters: RDI, RSI, RDX, RBX */
 	copy_smc_param(&arch->contexts[!next_world].run_ctx,
 			&arch->contexts[next_world].run_ctx);
+
+	/* Copy RCX as params for OPTEE */
+	if (vcpu->vm->vm_id == 0) {
+		arch->contexts[next_world].run_ctx.guest_cpu_regs.regs.rcx =
+			arch->contexts[!next_world].run_ctx.guest_cpu_regs.regs.rcx;
+	}
 
 	if (next_world == NORMAL_WORLD) {
 		/* load EPTP for next world */
 		exec_vmwrite64(VMX_EPT_POINTER_FULL,
 			hva2hpa(vcpu->vm->arch_vm.nworld_eptp) |
 			(3UL << 3U) | 0x6UL);
+
+		if (vcpu->vm->vm_id == 0 && vcpu->vm->sworld_control.flag.active == 0UL) {
+			vcpu->vm->sworld_control.flag.active = 1UL;
+		}
 
 #ifndef CONFIG_L1D_FLUSH_VMENTRY_ENABLED
 		cpu_l1d_flush();

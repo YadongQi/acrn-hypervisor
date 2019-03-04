@@ -172,6 +172,10 @@ static int32_t dispatch_hypercall(struct acrn_vcpu *vcpu)
 		ret = hcall_vm_intr_monitor(vm, (uint16_t)param1, param2);
 		break;
 
+	case HC_INITIALIZE_TEE:
+		ret = hcall_initialize_tee(vcpu, param1);
+		break;
+
 	default:
 		ret = hcall_debug(vm, param1, param2, hypcall_id);
 		break;
