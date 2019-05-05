@@ -418,6 +418,7 @@ int32_t create_vcpu(uint16_t pcpu_id, struct acrn_vm *vm, struct acrn_vcpu **rtn
 	return 0;
 }
 
+extern void print_vmcs_all(struct acrn_vcpu *vcpu);
 /*
  *  @pre vcpu != NULL
  */
@@ -480,6 +481,8 @@ int32_t run_vcpu(struct acrn_vcpu *vcpu)
 #ifdef CONFIG_L1D_FLUSH_VMENTRY_ENABLED
 		cpu_l1d_flush();
 #endif
+
+		print_vmcs_all(vcpu);
 
 		/* Launch the VM */
 		status = vmx_vmrun(ctx, VM_LAUNCH, ibrs_type);
