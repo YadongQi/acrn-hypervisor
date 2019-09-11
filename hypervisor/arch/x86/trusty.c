@@ -522,6 +522,8 @@ void trusty_set_dseed(const void *dseed, uint8_t dseed_num)
 
 void save_sworld_context(struct acrn_vcpu *vcpu)
 {
+	vcpu->arch.contexts[SECURE_WORLD].ext_ctx.tsc_offset += rdtsc();
+
 	(void)memcpy_s(&vcpu->vm->sworld_snapshot,
 			sizeof(struct cpu_context),
 			&vcpu->arch.contexts[SECURE_WORLD],
@@ -542,6 +544,8 @@ void restore_sworld_context(struct acrn_vcpu *vcpu)
 			sizeof(struct cpu_context),
 			&vcpu->vm->sworld_snapshot,
 			sizeof(struct cpu_context));
+
+	vcpu->arch.contexts[SECURE_WORLD].ext_ctx.tsc_offset -= rdtsc();
 }
 
 /**
